@@ -37,7 +37,8 @@ import com.qualcomm.robotcore.eventloop.opmode.OpModeRegister;
 /**
  * Register Op Modes
  */
-public class FtcOpModeRegister implements OpModeRegister {
+public class FtcOpModeRegister implements OpModeRegister
+{
 
   /**
    * The Op Mode Manager will call this method when it wants a list of all
@@ -45,7 +46,8 @@ public class FtcOpModeRegister implements OpModeRegister {
    *
    * @param manager op mode manager
    */
-    public void register(OpModeManager manager) {
+    public void register(OpModeManager manager)
+    {
 
     /*
      * register your op modes here.
@@ -106,11 +108,12 @@ public class FtcOpModeRegister implements OpModeRegister {
     manager.register("PushBotSquare", PushBotSquare.class);
 */
 
-    manager.register("Synch Telemetry", SynchTelemetryOp.class);
-    manager.register("Synch TeleOp", SynchTeleOp.class);
-    manager.register("Synch Tele Drive Modes", SynchTeleOpModes.class);
-    manager.register("Synch Skeleton", SynchSkeletalOp.class);
-    manager.register("Synch Motor Loop Perf", SynchMotorLoopPerf.class);
-    manager.register("Synch IMU Demo", SynchIMUDemo.class);
-  }
+        manager.register("Synch Telemetry", SynchTelemetryOp.class);
+        manager.register("Synch TeleOp", SynchTeleOp.class);
+        manager.register("Synch Tele Drive Modes", SynchTeleOpModes.class);
+        manager.register("Synch Skeleton", SynchSkeletalOp.class);
+        manager.register("Synch Motor Loop Perf", SynchMotorLoopPerf.class);
+        manager.register("Synch IMU Demo", SynchIMUDemo.class);
+        manager.register("8923 Main TeleOp", MainTeleOp8923.class);
+    }
 }
