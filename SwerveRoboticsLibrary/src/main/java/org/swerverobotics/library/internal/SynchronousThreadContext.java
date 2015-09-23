@@ -1,7 +1,7 @@
 package org.swerverobotics.library.internal;
 
-import junit.framework.Assert;
-import org.swerverobotics.library.BuildConfig;
+import org.swerverobotics.library.*;
+import org.swerverobotics.library.interfaces.*;
 
 /**
  * SynchronousThreadContext maintains the internal context for a synchronous thread.
@@ -21,7 +21,7 @@ public class SynchronousThreadContext
      * getThunker() returns the channel by which we can thunk from a synchronous
      * thread to the loop() thread.
      */
-    public IThunker getThunker() { return this.thunker; }
+    public IThunkDispatcher getThunker() { return this.thunker; }
 
     /**
      * The action key used for write thunks that are issued by this thread
@@ -29,13 +29,13 @@ public class SynchronousThreadContext
     public int actionKeyWritesFromThisThread = Thunk.getNewActionKey();
 
     private final Thread   thread;
-    private final IThunker thunker;
+    private final IThunkDispatcher thunker;
 
     //----------------------------------------------------------------------------------------------
     // Construction
     //----------------------------------------------------------------------------------------------
 
-    public SynchronousThreadContext(IThunker thunker)
+    public SynchronousThreadContext(IThunkDispatcher thunker)
         {
         this.thread = Thread.currentThread();
         this.thunker = thunker;
@@ -45,7 +45,7 @@ public class SynchronousThreadContext
     // Lookup
     //----------------------------------------------------------------------------------------------
 
-    public static void setThreadThunker(IThunker thunker)
+    public static void setThreadThunker(IThunkDispatcher thunker)
         {
         tlsThunker.set(new SynchronousThreadContext(thunker));
         }
@@ -64,7 +64,7 @@ public class SynchronousThreadContext
         {
         if (BuildConfig.DEBUG) 
             {
-            Assert.assertEquals(true, isSynchronousThread());
+            junit.framework.Assert.assertEquals(true, isSynchronousThread());
             }
         }
 

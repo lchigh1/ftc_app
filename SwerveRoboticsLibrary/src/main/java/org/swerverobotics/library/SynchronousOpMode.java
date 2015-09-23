@@ -18,30 +18,36 @@ import org.swerverobotics.library.internal.*;
  *
  * Extend this class and implement the main() method to add your own code.
  */
-public abstract class SynchronousOpMode extends OpMode implements IThunker
+public abstract class SynchronousOpMode extends OpMode implements IThunkDispatcher
     {
     //----------------------------------------------------------------------------------------------
     // Public State
     //----------------------------------------------------------------------------------------------
 
     /**
+     * provides access to the first gamepad controller.
+     * 
      * The game pad variables are redeclared here so as to hide those in our OpMode superclass
      * as the latter may be updated by robot controller runtime at arbitrary times and in a manner 
      * which is not synchronized with processing on a synchronous thread. We take pains to ensure 
      * that the variables declared here do not suffer from that problem.
      */
     public IGamepad gamepad1 = null;
+    /** 
+     * provides access to the second gamepad controller.
+     * @see #gamepad1 */
     public IGamepad gamepad2 = null;
 
     /**
+     * provides access to an object by which telemetry information can be transmitted
+     * from the robot controller to the driver station.
+     * 
      * As with game pads, we hid the 'telemetry' variable of the super class and replace it
-     * with one that can work from synchronous threads.
+     * with one that can work on synchronous threads.
      */
     public TelemetryDashboardAndLog telemetry;
 
-    /**
-     * The number of nanoseconds in a millisecond.
-     */
+    /** Advanced: the number of nanoseconds in a millisecond. */
     public static final long NANO_TO_MILLI = 1000000;
 
     /**
@@ -51,6 +57,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
      * Usually, much less time than this maximum is expended.
      */
     public long getMsLoopDwellMax()                    { return msLoopDwellMax; }
+    /** @see #getMsLoopDwellMax() */
     public void setMsLoopDwellMax(long msLoopDwellMax) { this.msLoopDwellMax = msLoopDwellMax; }
     private long msLoopDwellMax = 15;
 
@@ -71,6 +78,11 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
      * in OpMode before it was replaced with a version that does thunking.
      */
     public HardwareMap unthunkedHardwareMap = null;
+
+    /**
+     * Advanced: use experimental approaches to thunking hardware devices
+     */
+    protected boolean useExperimentalThunking = false; 
 
     //----------------------------------------------------------------------------------------------
     // Key Public and Protected Methods
@@ -143,6 +155,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
         // incoming gamepad change messages, but, alas, at present we can find no
         // way of doing that.
         //
+        this.gamepadInputQueried = true;
         return this.gamePadStateChanged.getAndSet(false);
         }
 
@@ -153,9 +166,15 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
      */
     public final boolean isNewGamePadInputAvailable()
         {
+        this.gamepadInputQueried = true;
+        return this.isNewGamePadInputAvailableInternal();
+        }
+    
+    private final boolean isNewGamePadInputAvailableInternal()
+        {
         return this.gamePadStateChanged.get();
         }
-
+    
     /**
      * Put the current thread to sleep for a bit as it has nothing better to do.
      *
@@ -175,8 +194,13 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
         synchronized (this.loopLock)
             {
             // If new input has arrived since anyone last looked, then let our caller process that
-            if (this.isNewGamePadInputAvailable())
+            // if he is looking at the game pad input. If he's not, then we save some cycles and
+            // processing power by waiting instead of spinning.
+            if (this.gamepadInputQueried && this.isNewGamePadInputAvailableInternal())
+                {
+                Thread.yield();     // avoid tight loop if caller not looking at gamepad input
                 return;
+                }
             
             // Otherwise, we know there's nothing to do until at least the next loop() call.
             // The trouble is, it's hard to know when that is. We might be running here 
@@ -247,6 +271,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
     private volatile boolean                stopRequested;
     private final   ActionQueueAndHistory   actionQueueAndHistory = new ActionQueueAndHistory();
     private         AtomicBoolean           gamePadStateChanged = new AtomicBoolean(false);
+    private         boolean                 gamepadInputQueried = false;
     private final   Object                  loopLock = new Object();
     private final   SparseArray<IAction>    singletonLoopActions = new SparseArray<IAction>();
     private static  AtomicInteger           prevSingletonKey = new AtomicInteger(0);
@@ -434,8 +459,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
                 {
                 this.threadBody.run();
                 }
-            catch (InterruptedException ignored) { }
-            catch (RuntimeInterruptedException ignored)
+            catch (InterruptedException|RuntimeInterruptedException ignored)
                 {
                 // If the main() method itself doesn't catch the interrupt, at least
                 // we will do so here. The whole point of such interrupts is to
@@ -470,7 +494,10 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
             {
             thread.join(msWait);
             }
-        catch (InterruptedException ignored) { }
+        catch (InterruptedException ignored)
+            { 
+            Util.handleCapturedInterrupt();
+            }
         }
 
     private void stopSynchronousWorkerThreads(int msWait)
@@ -494,7 +521,10 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
                 {
                 thread.join(msWait);
                 }
-            catch (InterruptedException ignored) { }
+            catch (InterruptedException ignored) 
+                {
+                Util.handleCapturedInterrupt();
+                }
             }
         }
 
@@ -506,8 +536,13 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
         if (!isMain) SynchronousThreadContext.assertSynchronousThread();
         //
         Thread thread = new Thread(new SynchronousThreadRoot(threadBody, isMain));
-        if (!isMain)
+        if (isMain)
             {
+            thread.setName("Sync main");
+            }
+        else
+            {
+            thread.setName("Sync worker");
             this.synchronousWorkerThreads.add(thread);
             }
         return thread;
@@ -533,7 +568,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
         // Replace the op mode's hardware map variable with one whose contained
         // object implementations will thunk over to the loop thread as they need to.
         this.unthunkedHardwareMap = super.hardwareMap;
-        this.hardwareMap = createThunkedHardwareMap(this.unthunkedHardwareMap);
+        this.hardwareMap = (new ThunkingHardwareFactory(this.useExperimentalThunking)).createThunkedHardwareMap(this.unthunkedHardwareMap);
 
         // Similarly replace the telemetry variable
         this.telemetry = new TelemetryDashboardAndLog(super.telemetry);
@@ -556,12 +591,12 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
 
         // Create the main thread and start it up and going!
         this.mainThread = this.createSynchronousWorkerThread(new IInterruptableRunnable()
-        {
-        @Override public void run() throws InterruptedException
             {
-            SynchronousOpMode.this.main();
-            }
-        }, true);
+            @Override public void run() throws InterruptedException
+                {
+                SynchronousOpMode.this.main();
+                }
+            }, true);
         this.mainThread.start();
 
         // Call the subclass hook in case they might want to do something interesting
@@ -591,6 +626,9 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
     
     /**
      * The robot controller runtime calls loop() on a frequent basis, nominally every few ms or so.
+     * 
+     * Our implementation here just executes the work that has been requested from the
+     * synchronous threads.
      */
     @Override public final void loop()
         {
@@ -715,48 +753,57 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
     /**
      * Advanced: the various 'hook' calls calls preInitHook(), postInitHook(), preLoopHook(), 
      * etc are hooks that advanced users might want to override in their subclasses to something
-     * interesting.
-     *
-     * The 'pre' and 'post' variations are called at the beginning and the end of their respective
+     * interesting. 
+     * 
+     * No particular semantic is implied or required, though the timing of the calls is defined:
+     * the 'pre' and 'post' variations are called at the beginning and the end of their respective
      * methods, while midLoopHook() is called in loop() after variable state (e.g. gamepads) has
      * been established.
      */
     protected void preInitHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void postInitHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void preStartHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void postStartHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void preLoopHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void midLoopHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void postLoopHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void preStopHook() { /* hook for subclasses */ }
     /**
+     * Advanced: a hook for subclasses
      * @see #preInitHook()
      */
     protected void postStopHook() { /* hook for subclasses */ }
 
     //----------------------------------------------------------------------------------------------
-    // IThunker
+    // IThunkDispatcher
     //----------------------------------------------------------------------------------------------
 
     /**
@@ -805,7 +852,7 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
      * which is managing the internal from the current thread to the loop() thread.
      * If we are not on a synchronous thread, then the behaviour is undefined.
      */
-    public static IThunker getThreadThunker()
+    public static IThunkDispatcher getThreadThunker()
         {
         SynchronousThreadContext.assertSynchronousThread();
         return SynchronousThreadContext.getThreadContext().getThunker();
@@ -877,262 +924,6 @@ public abstract class SynchronousOpMode extends OpMode implements IThunker
         synchronized (this.singletonLoopActions)
             {
             this.singletonLoopActions.clear();
-            }
-        }
-
-    //----------------------------------------------------------------------------------------------
-    // Thunking hardware map
-    //----------------------------------------------------------------------------------------------
-
-    /**
-     * Rare: Given a (non-internal) hardware map, create a new hardware map containing
-     * all the same devices but in a form that their methods thunk from the main()
-     * thread to the loop() thread.
-     */
-    private final static HardwareMap createThunkedHardwareMap(HardwareMap hwmap)
-        {
-        HardwareMap result = new HardwareMap();
-
-        createThunks(hwmap.dcMotorController, result.dcMotorController,
-                new IThunkFactory<DcMotorController>()
-                {
-                @Override public DcMotorController create(DcMotorController target)
-                    {
-                    return ThunkedDCMotorController.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.servoController, result.servoController,
-                new IThunkFactory<ServoController>()
-                {
-                @Override public ServoController create(ServoController target)
-                    {
-                    return ThunkedServoController.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.legacyModule, result.legacyModule,
-                new IThunkFactory<LegacyModule>()
-                {
-                @Override public LegacyModule create(LegacyModule target)
-                    {
-                    return ThunkedLegacyModule.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.deviceInterfaceModule, result.deviceInterfaceModule,
-                new IThunkFactory<DeviceInterfaceModule>()
-                {
-                @Override public DeviceInterfaceModule create(DeviceInterfaceModule target)
-                    {
-                    return ThunkedDeviceInterfaceModule.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.analogInput, result.analogInput,
-                new IThunkFactory<AnalogInput>()
-                {
-                @Override public AnalogInput create(AnalogInput target)
-                    {
-                    return new ThreadSafeAnalogInput(
-                        ThunkedAnalogInputController.create(ThreadSafeAnalogInput.getController(target)),
-                        ThreadSafeAnalogInput.getChannel(target)
-                        );
-                    }
-                }
-        );
-
-        createThunks(hwmap.analogOutput, result.analogOutput,
-                new IThunkFactory<AnalogOutput>()
-                {
-                @Override public AnalogOutput create(AnalogOutput target)
-                    {
-                    return new ThreadSafeAnalogOutput(
-                            ThunkedAnalogOutputController.create(ThreadSafeAnalogOutput.getController(target)),
-                            ThreadSafeAnalogOutput.getChannel(target)
-                    );
-                    }
-                }
-        );
-
-        createThunks(hwmap.pwmOutput, result.pwmOutput,
-                new IThunkFactory<PWMOutput>()
-                {
-                @Override public PWMOutput create(PWMOutput target)
-                    {
-                    return new ThreadSafePWMOutput(
-                            ThunkedPWMOutputController.create(ThreadSafePWMOutput.getController(target)),
-                            ThreadSafePWMOutput.getChannel(target)
-                    );
-                    }
-                }
-        );
-
-        createThunks(hwmap.i2cDevice, result.i2cDevice,
-                new IThunkFactory<I2cDevice>()
-                {
-                @Override public I2cDevice create(I2cDevice target)
-                    {
-                    return new ThreadSafeI2cDevice(
-                            ThunkedI2cController.create(ThreadSafeI2cDevice.getController(target)),
-                            ThreadSafeI2cDevice.getChannel(target)
-                    );
-                    }
-                }
-        );
-
-        createThunks(hwmap.digitalChannel, result.digitalChannel,
-                new IThunkFactory<DigitalChannel>()
-                {
-                @Override public DigitalChannel create(DigitalChannel target)
-                    {
-                    return new ThreadSafeDigitalChannel(
-                            ThunkedDigitalChannelController.create(ThreadSafeDigitalChannel.getController(target)),
-                            ThreadSafeDigitalChannel.getChannel(target)
-                        );
-                    }
-                }
-        );
-
-        createThunks(hwmap.dcMotor, result.dcMotor,
-                new IThunkFactory<DcMotor>()
-                {
-                @Override public DcMotor create(DcMotor target)
-                    {
-                    return new ThreadSafeDcMotor(
-                        ThunkedDCMotorController.create(target.getController()),
-                        target.getPortNumber(),
-                        target.getDirection()
-                    );
-                    }
-                }
-        );
-
-        createThunks(hwmap.servo, result.servo,
-                new IThunkFactory<com.qualcomm.robotcore.hardware.Servo>()
-                {
-                @Override
-                public com.qualcomm.robotcore.hardware.Servo create(com.qualcomm.robotcore.hardware.Servo target)
-                    {
-                    return new ThreadSafeServo(
-                        ThunkedServoController.create(target.getController()),
-                        target.getPortNumber(),
-                        target.getDirection()
-                    );
-                    }
-                }
-        );
-
-        createThunks(hwmap.accelerationSensor, result.accelerationSensor,
-                new IThunkFactory<AccelerationSensor>()
-                {
-                @Override public AccelerationSensor create(AccelerationSensor target)
-                    {
-                    return ThunkedAccelerationSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.compassSensor, result.compassSensor,
-                new IThunkFactory<CompassSensor>()
-                {
-                @Override public CompassSensor create(CompassSensor target)
-                    {
-                    return ThunkedCompassSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.gyroSensor, result.gyroSensor,
-                new IThunkFactory<GyroSensor>()
-                {
-                @Override public GyroSensor create(GyroSensor target)
-                    {
-                    return ThunkedGyroSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.irSeekerSensor, result.irSeekerSensor,
-                new IThunkFactory<IrSeekerSensor>()
-                {
-                @Override public IrSeekerSensor create(IrSeekerSensor target)
-                    {
-                    return ThunkedIrSeekerSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.lightSensor, result.lightSensor,
-                new IThunkFactory<LightSensor>()
-                {
-                @Override public LightSensor create(LightSensor target)
-                    {
-                    return ThunkedLightSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.opticalDistanceSensor, result.opticalDistanceSensor,
-                new IThunkFactory<OpticalDistanceSensor>()
-                {
-                @Override public OpticalDistanceSensor create(OpticalDistanceSensor target)
-                    {
-                    return ThunkedOpticalDistanceSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.touchSensor, result.touchSensor,
-                new IThunkFactory<TouchSensor>()
-                {
-                @Override public TouchSensor create(TouchSensor target)
-                    {
-                    return ThunkedTouchSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.ultrasonicSensor, result.ultrasonicSensor,
-                new IThunkFactory<UltrasonicSensor>()
-                {
-                @Override public UltrasonicSensor create(UltrasonicSensor target)
-                    {
-                    return ThunkedUltrasonicSensor.create(target);
-                    }
-                }
-        );
-
-        createThunks(hwmap.voltageSensor, result.voltageSensor,
-                new IThunkFactory<VoltageSensor>()
-                {
-                @Override public VoltageSensor create(VoltageSensor target)
-                    {
-                    return ThunkedVoltageSensor.create(target);
-                    }
-                }
-        );
-
-        result.appContext = hwmap.appContext;
-
-        return result;
-        }
-
-    private interface IThunkFactory<T>
-        {
-        T create(T t);
-        }
-
-    private static <T> void createThunks(HardwareMap.DeviceMapping<T> from, HardwareMap.DeviceMapping<T> to, IThunkFactory<T> thunkFactory)
-        {
-        for (Map.Entry<String,T> pair : from.entrySet())
-            {
-            T thunked = thunkFactory.create(pair.getValue());
-            to.put(pair.getKey(), thunked);
             }
         }
     }
