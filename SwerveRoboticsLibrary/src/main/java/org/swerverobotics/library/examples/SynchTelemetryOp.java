@@ -1,16 +1,15 @@
 package org.swerverobotics.library.examples;
 
-import org.swerverobotics.library.*;
-import org.swerverobotics.library.interfaces.Autonomous;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.swerverobotics.library.SynchronousOpMode;
 import org.swerverobotics.library.interfaces.Disabled;
 import org.swerverobotics.library.interfaces.TeleOp;
-
-import com.qualcomm.robotcore.util.*;
 
 /**
  * An example that illustrates use of the telemetry dashboard and log
  */
-@TeleOp(name="Telemetry")
+@TeleOp(name="SwerveTelemetry")
 @Disabled
 public class SynchTelemetryOp extends SynchronousOpMode
     {
