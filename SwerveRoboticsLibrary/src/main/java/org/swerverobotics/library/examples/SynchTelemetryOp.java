@@ -9,8 +9,7 @@ import org.swerverobotics.library.interfaces.TeleOp;
 /**
  * An example that illustrates use of the telemetry dashboard and log
  */
-@TeleOp(name="SwerveTelemetry")
-@Disabled
+@TeleOp(name="SwerveTelemetry", group="Swerve Examples")
 public class SynchTelemetryOp extends SynchronousOpMode
     {
     @Override protected void main() throws InterruptedException
@@ -40,7 +39,7 @@ public class SynchTelemetryOp extends SynchronousOpMode
             // Update the telemetry dashboard with fresh values
             this.telemetry.addData("time",  format(elapsed));
             this.telemetry.addData("count", getLoopCount() - loopCountStart);
-            this.telemetry.addData("rate",  format(elapsed.time() / (getLoopCount() - loopCountStart) * 1000) + "ms");
+            this.telemetry.addData("rate",  format(elapsed.time()*1000.0 / (getLoopCount() - loopCountStart)) + "ms");
 
             // Update driver station and wait until there's something useful to do
             this.telemetry.update();
