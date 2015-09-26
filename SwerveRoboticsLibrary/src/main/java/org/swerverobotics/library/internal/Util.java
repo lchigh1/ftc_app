@@ -1,5 +1,8 @@
 package org.swerverobotics.library.internal;
 
+import com.qualcomm.robotcore.hardware.HardwareDevice;
+import com.qualcomm.robotcore.hardware.LegacyModule;
+
 import org.swerverobotics.library.examples.*;
 import org.swerverobotics.library.exceptions.*;
 import org.swerverobotics.library.interfaces.*;
