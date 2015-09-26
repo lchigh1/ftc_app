@@ -34,25 +34,31 @@ public class SynchAuto1 extends SynchronousOpMode
         // Wait for the game to begin
         this.waitForStart();
 
-        // Loop until the game is finished
-        while (this.opModeIsActive())
+        // Go go gadget robot!
+        while (opModeIsActive())
         {
-            motorLeft.setPower(1.0);
-            motorRight.setPower(1.0);
-            Thread.sleep(500);
-            motorLeft.setPower(0.0);
-            motorRight.setPower(0.0);
-            Thread.sleep(500);
-            motorLeft.setPower(-1.0);
-            motorRight.setPower(-1.0);
-            Thread.sleep(500);
-            motorLeft.setPower(0.0);
-            motorRight.setPower(0.0);
-            Thread.sleep(500);
+            double forward = -0.5;
+            double reverse = 0.5;
+            double stopped = 0.0;
+            for(int i=0; i<3; i++) {
+                motorLeft.setPower(forward);
+                motorRight.setPower(forward);
+                Thread.sleep(1000);
+                motorLeft.setPower(stopped);
+                motorRight.setPower(stopped);
+                Thread.sleep(2000);
+                motorLeft.setPower(forward);
+                motorRight.setPower(reverse);
+                Thread.sleep(1000);
+                motorLeft.setPower(stopped);
+                motorRight.setPower(stopped);
+                Thread.sleep(2000);
+            }
 
-            // Emit the latest telemetry and wait, letting other things run
-            this.telemetry.update();
-            this.idle();
+
+            telemetry.update();
+            idle();
+            break;
         }
     }
 }
