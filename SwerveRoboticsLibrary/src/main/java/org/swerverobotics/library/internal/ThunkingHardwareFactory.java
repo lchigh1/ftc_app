@@ -1,8 +1,7 @@
 package org.swerverobotics.library.internal;
 
 import com.qualcomm.robotcore.hardware.*;
-
-import org.swerverobotics.library.interfaces.IHardwareWrapper;
+import org.swerverobotics.library.interfaces.*;
 
 import java.util.*;
 
@@ -14,16 +13,23 @@ public class ThunkingHardwareFactory
     //----------------------------------------------------------------------------------------------
     // State 
     //----------------------------------------------------------------------------------------------
-    
-    boolean useExperimental;
-    
+
+    HardwareMap          unthunkedHwmap;
+    HardwareMap          thunkedHwmap;
+    IStopActionRegistrar stopRegistrar;
+    boolean              useExperimental;
+    final String         swerveVoltageSensorName = "<|Swerve VoltageSensor|>";
+
     //----------------------------------------------------------------------------------------------
     // Construction
     //----------------------------------------------------------------------------------------------
 
-    public ThunkingHardwareFactory(boolean useExperimental)
+    public ThunkingHardwareFactory(HardwareMap unthunkedHwmap, IStopActionRegistrar stopRegistrar, boolean useExperimental)
         {
-        this.useExperimental = useExperimental;
+        this.thunkedHwmap       = null;
+        this.unthunkedHwmap     = unthunkedHwmap;
+        this.stopRegistrar      = stopRegistrar;
+        this.useExperimental    = useExperimental;
         }
     
     //----------------------------------------------------------------------------------------------
@@ -31,20 +37,20 @@ public class ThunkingHardwareFactory
     //----------------------------------------------------------------------------------------------
     
     /**
-     * Rare: Given a (non-internal) hardware map, create a new hardware map containing
+     * Given a (non-internal) hardware map, create a new hardware map containing
      * all the same devices but in a form that their methods thunk from the main()
      * thread to the loop() thread.
      */
-    public final HardwareMap createThunkedHardwareMap(HardwareMap hwmap)
+    public final HardwareMap createThunkedHardwareMap()
         {
-        final HardwareMap result = new HardwareMap();
+        this.thunkedHwmap = new HardwareMap();
 
         //----------------------------------------------------------------------------
         // Modules
         //----------------------------------------------------------------------------
 
         // Thunk the legacy modules
-        createThunks(hwmap.legacyModule, result.legacyModule,
+        createThunks(unthunkedHwmap.legacyModule, thunkedHwmap.legacyModule,
             new IThunkFactory<LegacyModule>()
                 {
                 @Override public LegacyModule create(LegacyModule target)
@@ -55,7 +61,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the core device interface modules
-        createThunks(hwmap.deviceInterfaceModule, result.deviceInterfaceModule,
+        createThunks(unthunkedHwmap.deviceInterfaceModule, thunkedHwmap.deviceInterfaceModule,
             new IThunkFactory<DeviceInterfaceModule>()
                 {
                 @Override public DeviceInterfaceModule create(DeviceInterfaceModule target)
@@ -70,30 +76,16 @@ public class ThunkingHardwareFactory
         //----------------------------------------------------------------------------
 
         // Thunk the motor controllers. Some of these we might treat specially. 
-        createThunks(hwmap.dcMotorController, result.dcMotorController,
+        createThunks(unthunkedHwmap.dcMotorController, thunkedHwmap.dcMotorController,
             new IThunkFactory<DcMotorController>()
                 {
                 @Override public DcMotorController create(DcMotorController target)
                     {
                     if (useExperimental)
                         {
-                        if (isLegacyMotorController(target))
-                            {
-                            LegacyModule legacyModule = legacyModuleOfLegacyMotorController(target);
-                            int          port         = portOfLegacyMotorController(target);
-                            int          i2cAddr8Bit  = i2cAddrOfLegacyMotorController(target);
-                            
-                            // Disable the existing legacy motor controller
-                            legacyModule.deregisterForPortReadyCallback(port);
-                            
-                            // Make a new experimental legacy motor controller
-                            II2cDevice i2cDevice            = new I2cDeviceOnLegacyModule(legacyModule, port);
-                            I2cDeviceClient i2cDeviceClient = new I2cDeviceClient(i2cDevice, i2cAddr8Bit, null);
-                            DcMotorController controller    = new LegacyDcMotorControllerOnI2cDevice(i2cDeviceClient, target);
-                            
-                            // Use that one instead
-                            return controller;
-                            }
+                        DcMotorController newController = createNxtMotorControllerOnI2cDevice(target, stopRegistrar);
+                        if (newController != null)
+                            return newController;
                         }
                     
                     // Not experimental or not a legacy motor controller. Proceed as usual.
@@ -103,7 +95,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the servo controllers
-        createThunks(hwmap.servoController, result.servoController,
+        createThunks(unthunkedHwmap.servoController, thunkedHwmap.servoController,
             new IThunkFactory<ServoController>()
                 {
                 @Override public ServoController create(ServoController target)
@@ -114,17 +106,17 @@ public class ThunkingHardwareFactory
         );
 
         //----------------------------------------------------------------------------
-        // Devices
+        // Actuators
         //----------------------------------------------------------------------------
         
         // Thunk the DC motors
-        createThunks(hwmap.dcMotor, result.dcMotor,
+        createThunks(unthunkedHwmap.dcMotor, thunkedHwmap.dcMotor,
             new IThunkFactory<DcMotor>()
                 {
                 @Override public DcMotor create(DcMotor target)
                     {
                     DcMotorController targetController = target.getController();
-                    DcMotorController controller = findWrapper(result.dcMotorController, targetController, ThunkedDCMotorController.create(targetController));
+                    DcMotorController controller = findWrapper(thunkedHwmap.dcMotorController, targetController, ThunkedDCMotorController.create(targetController));
                     
                     return new ThreadSafeDcMotor(
                             controller,
@@ -136,13 +128,13 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the servos
-        createThunks(hwmap.servo, result.servo,
+        createThunks(unthunkedHwmap.servo, thunkedHwmap.servo,
             new IThunkFactory<Servo>()
                 {
                 @Override public Servo create(Servo target)
                     {
                     ServoController targetController = target.getController();
-                    ServoController controller = findWrapper(result.servoController, targetController, ThunkedServoController.create(targetController));
+                    ServoController controller = findWrapper(thunkedHwmap.servoController, targetController, ThunkedServoController.create(targetController));
 
                     return new ThreadSafeServo(
                             controller,
@@ -153,8 +145,12 @@ public class ThunkingHardwareFactory
                 }
         );
 
+        //----------------------------------------------------------------------------
+        // Sensors
+        //----------------------------------------------------------------------------
+
         // Thunk the analog inputs
-        createThunks(hwmap.analogInput, result.analogInput,
+        createThunks(unthunkedHwmap.analogInput, thunkedHwmap.analogInput,
             new IThunkFactory<AnalogInput>()
                 {
                 @Override public AnalogInput create(AnalogInput target)
@@ -168,7 +164,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the analog outputs
-        createThunks(hwmap.analogOutput, result.analogOutput,
+        createThunks(unthunkedHwmap.analogOutput, thunkedHwmap.analogOutput,
                 new IThunkFactory<AnalogOutput>()
                 {
                 @Override public AnalogOutput create(AnalogOutput target)
@@ -182,7 +178,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the pwm outputs
-        createThunks(hwmap.pwmOutput, result.pwmOutput,
+        createThunks(unthunkedHwmap.pwmOutput, thunkedHwmap.pwmOutput,
             new IThunkFactory<PWMOutput>()
                 {
                 @Override public PWMOutput create(PWMOutput target)
@@ -196,7 +192,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the i2c devices
-        createThunks(hwmap.i2cDevice, result.i2cDevice,
+        createThunks(unthunkedHwmap.i2cDevice, thunkedHwmap.i2cDevice,
             new IThunkFactory<I2cDevice>()
                 {
                 @Override public I2cDevice create(I2cDevice target)
@@ -210,7 +206,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the digital channels
-        createThunks(hwmap.digitalChannel, result.digitalChannel,
+        createThunks(unthunkedHwmap.digitalChannel, thunkedHwmap.digitalChannel,
             new IThunkFactory<DigitalChannel>()
                 {
                 @Override public DigitalChannel create(DigitalChannel target)
@@ -224,7 +220,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the acceleration sensors
-        createThunks(hwmap.accelerationSensor, result.accelerationSensor,
+        createThunks(unthunkedHwmap.accelerationSensor, thunkedHwmap.accelerationSensor,
             new IThunkFactory<AccelerationSensor>()
                 {
                 @Override public AccelerationSensor create(AccelerationSensor target)
@@ -235,7 +231,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the compass sensors
-        createThunks(hwmap.compassSensor, result.compassSensor,
+        createThunks(unthunkedHwmap.compassSensor, thunkedHwmap.compassSensor,
             new IThunkFactory<CompassSensor>()
                 {
                 @Override public CompassSensor create(CompassSensor target)
@@ -246,7 +242,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the gyro sensors
-        createThunks(hwmap.gyroSensor, result.gyroSensor,
+        createThunks(unthunkedHwmap.gyroSensor, thunkedHwmap.gyroSensor,
                 new IThunkFactory<GyroSensor>()
                 {
                 @Override public GyroSensor create(GyroSensor target)
@@ -257,7 +253,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the IR seekers
-        createThunks(hwmap.irSeekerSensor, result.irSeekerSensor,
+        createThunks(unthunkedHwmap.irSeekerSensor, thunkedHwmap.irSeekerSensor,
                 new IThunkFactory<IrSeekerSensor>()
                 {
                 @Override public IrSeekerSensor create(IrSeekerSensor target)
@@ -268,7 +264,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the light sensors
-        createThunks(hwmap.lightSensor, result.lightSensor,
+        createThunks(unthunkedHwmap.lightSensor, thunkedHwmap.lightSensor,
                 new IThunkFactory<LightSensor>()
                 {
                 @Override public LightSensor create(LightSensor target)
@@ -279,7 +275,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the optical distance sensors
-        createThunks(hwmap.opticalDistanceSensor, result.opticalDistanceSensor,
+        createThunks(unthunkedHwmap.opticalDistanceSensor, thunkedHwmap.opticalDistanceSensor,
                 new IThunkFactory<OpticalDistanceSensor>()
                 {
                 @Override public OpticalDistanceSensor create(OpticalDistanceSensor target)
@@ -290,7 +286,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the touch sensors
-        createThunks(hwmap.touchSensor, result.touchSensor,
+        createThunks(unthunkedHwmap.touchSensor, thunkedHwmap.touchSensor,
                 new IThunkFactory<TouchSensor>()
                 {
                 @Override public TouchSensor create(TouchSensor target)
@@ -301,7 +297,7 @@ public class ThunkingHardwareFactory
         );
 
         // Thunk the ultrasonic sensors
-        createThunks(hwmap.ultrasonicSensor, result.ultrasonicSensor,
+        createThunks(unthunkedHwmap.ultrasonicSensor, thunkedHwmap.ultrasonicSensor,
                 new IThunkFactory<UltrasonicSensor>()
                 {
                 @Override public UltrasonicSensor create(UltrasonicSensor target)
@@ -311,8 +307,11 @@ public class ThunkingHardwareFactory
                 }
         );
 
+        // Paranoia
+        removeSwerveVoltageSensor();
+
         // Thunk the voltage sensors
-        createThunks(hwmap.voltageSensor, result.voltageSensor,
+                createThunks(unthunkedHwmap.voltageSensor, thunkedHwmap.voltageSensor,
                 new IThunkFactory<VoltageSensor>()
                 {
                 @Override public VoltageSensor create(VoltageSensor target)
@@ -322,9 +321,87 @@ public class ThunkingHardwareFactory
                 }
         );
 
-        result.appContext = hwmap.appContext;
+        // Thunk the color sensors
+        createThunks(unthunkedHwmap.colorSensor, thunkedHwmap.colorSensor,
+                new IThunkFactory<ColorSensor>()
+                {
+                @Override public ColorSensor create(ColorSensor target)
+                    {
+                    return ThunkedColorSensor.create(target);
+                    }
+                }
+        );
 
-        return result;
+        // Thunk the LEDs
+        createThunks(unthunkedHwmap.led, thunkedHwmap.led,
+                new IThunkFactory<LED>()
+                {
+                @Override public LED create(LED target)
+                    {
+                    return ThunkedLED.create(target);
+                    }
+                }
+        );
+
+        // Thunk the TouchSensorMultiplexers
+        createThunks(unthunkedHwmap.touchSensorMultiplexer , thunkedHwmap.touchSensorMultiplexer ,
+                new IThunkFactory<TouchSensorMultiplexer>()
+                {
+                @Override public TouchSensorMultiplexer create(TouchSensorMultiplexer target)
+                    {
+                    return ThunkedTouchSensorMultiplexer.create(target);
+                    }
+                }
+        );
+
+        //----------------------------------------------------------------------------
+        // Context
+        //----------------------------------------------------------------------------
+
+        // Carry over the app context
+        thunkedHwmap.appContext = unthunkedHwmap.appContext;
+
+        // If they haven't actually given us one (early versions of the runtime didn't actually set one),
+        // then fill one in through the use of magic.
+        if (thunkedHwmap.appContext == null)
+            thunkedHwmap.appContext = AnnotatedOpModeRegistrar.getApplicationContext();
+
+        //----------------------------------------------------------------------------
+        // Voltage sensor
+        //----------------------------------------------------------------------------
+
+        // Are there any voltage sensors there in the map the robot controller runtime made?
+        if (unthunkedHwmap.voltageSensor.size() == 0)
+            {
+            // No, there isn't. See if we can find one in our motor controller. It'll be one we
+            // made if it's there, and those don't actually thunk. If we find one, stick it
+            // in the *original* map as well as the new one, the former so that the UI will
+            // now show voltage, the latter for consistency.
+            for (DcMotorController controller : thunkedHwmap.dcMotorController)
+                {
+                if (controller instanceof VoltageSensor)
+                    {
+                    unthunkedHwmap.voltageSensor.put(swerveVoltageSensorName, (VoltageSensor)controller);
+                      thunkedHwmap.voltageSensor.put(swerveVoltageSensorName, (VoltageSensor)controller);
+                    break;
+                    }
+                }
+            }
+
+        return thunkedHwmap;
+        }
+
+    public void stop()
+        {
+        // Paranoia: don't let this little trick of ours outlive the life of our OpMode
+        removeSwerveVoltageSensor();
+        }
+
+    private void removeSwerveVoltageSensor()
+        {
+        // Remove any VoltageSensor we made that somehow might be lingering around
+        Util.<Map>getPrivateObjectField(unthunkedHwmap.voltageSensor,0).remove(this.swerveVoltageSensorName);
+        Util.<Map>getPrivateObjectField(  thunkedHwmap.voltageSensor,0).remove(this.swerveVoltageSensorName);
         }
 
     private interface IThunkFactory<T>
@@ -341,9 +418,11 @@ public class ThunkingHardwareFactory
             }
         }
 
-    private <T> T findWrapper(HardwareMap.DeviceMapping<T> mapping, T target, T ifAbsent)
+    // Find and return the wrapping of the indicated target with the wrapping map; if absent,
+    // return the ifAbsent value.
+    private <T> T findWrapper(HardwareMap.DeviceMapping<T> wrappingMap, T target, T ifAbsent)
         {
-        for (Map.Entry<String,T> pair : mapping.entrySet())
+        for (Map.Entry<String,T> pair : wrappingMap.entrySet())
             {
             T thunked = pair.getValue();
             if (thunked instanceof IHardwareWrapper)
@@ -360,23 +439,48 @@ public class ThunkingHardwareFactory
     //----------------------------------------------------------------------------------------------
     // Skullduggery 
     //----------------------------------------------------------------------------------------------
-    
-    private boolean isLegacyMotorController(DcMotorController controller)
+
+    public static DcMotorController createNxtMotorControllerOnI2cDevice(DcMotorController target, IStopActionRegistrar stopRegistrar)
         {
-        return controller instanceof LegacyModule.PortReadyCallback;
+        if (isLegacyMotorController(target))
+            {
+            LegacyModule legacyModule = legacyModuleOfLegacyMotorController(target);
+            int          port         = portOfLegacyMotorController(target);
+            int          i2cAddr8Bit  = i2cAddrOfLegacyMotorController(target);
+
+            // Disable the existing legacy motor controller
+            legacyModule.deregisterForPortReadyCallback(port);
+
+            // Make a new experimental legacy motor controller
+            II2cDevice i2cDevice            = new I2cDeviceOnI2cDeviceController(legacyModule, port);
+            I2cDeviceClient i2cDeviceClient = new I2cDeviceClient(i2cDevice, i2cAddr8Bit, /*autostop*/true, stopRegistrar);
+            DcMotorController controller    = new NxtDcMotorControllerOnI2cDevice(i2cDeviceClient, target);
+
+            // Use that one instead
+            return controller;
+            }
+        else
+            {
+            return null;
+            }
         }
 
-    private LegacyModule legacyModuleOfLegacyMotorController(DcMotorController controller)
+    private static boolean isLegacyMotorController(DcMotorController controller)
+        {
+        return controller instanceof com.qualcomm.hardware.ModernRoboticsNxtDcMotorController;
+        }
+
+    private static LegacyModule legacyModuleOfLegacyMotorController(DcMotorController controller)
         {
         return Util.<LegacyModule>getPrivateObjectField(controller, 0);
         }
 
-    private int portOfLegacyMotorController(DcMotorController controller)
+    private static int portOfLegacyMotorController(DcMotorController controller)
         {
         return Util.getPrivateIntField(controller, 5);
         }
     
-    private int i2cAddrOfLegacyMotorController(DcMotorController controller)
+    private static int i2cAddrOfLegacyMotorController(DcMotorController controller)
         {
         // From the spec from HiTechnic:
         //
