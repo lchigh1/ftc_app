@@ -5,12 +5,14 @@ import com.qualcomm.robotcore.hardware.DcMotorController;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.swerverobotics.library.SynchronousOpMode;
+import org.swerverobotics.library.interfaces.Disabled;
 import org.swerverobotics.library.interfaces.TeleOp;
 
 /**
  * A basic TeleOp program made for the "Basic TeleOp" video
  */
-@TeleOp(name="My First OpMode")
+@TeleOp(name="Tutorial TeleOp")
+@Disabled
 public class TutorialTeleOp extends SynchronousOpMode
 {
     // Declare motors
