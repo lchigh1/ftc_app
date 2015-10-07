@@ -18,16 +18,15 @@ public class ServoTester extends SynchronousOpMode
         this.servo = this.hardwareMap.servo.get("servo");
 
         // Configure dashboard
-        this.telemetry.dashboard.line
-        (
-            this.telemetry.dashboard.item("Servo:", new IFunc<Object>()
-            {
-                @Override public Object value()
-                {
-                    return servo.getPosition();
-                }
-            })
-        );
+        this.telemetry.addLine
+                (
+                        this.telemetry.item("Servo:", new IFunc<Object>() {
+                            @Override
+                            public Object value() {
+                                return servo.getPosition();
+                            }
+                        })
+                );
         
         // Wait until we've been given the ok to go
         this.waitForStart();
@@ -35,7 +34,7 @@ public class ServoTester extends SynchronousOpMode
         // Enter a loop processing all the input we receive
         while (this.opModeIsActive())
         {
-            if (this.newGamePadInputAvailable())
+            if (this.updateGamepads())
             {
                 /*
                  * Move servo corresponding to left joystick values
@@ -43,11 +42,11 @@ public class ServoTester extends SynchronousOpMode
                  * The range of the servos is 0 to 1
                  * This adjusts the range of a joystick to be in a servo range
                  */
-                servo.setPosition((gamepad1.left_stick_y() + 1) / 2);
+                servo.setPosition((gamepad1.left_stick_y + 1) / 2);
             }
 
             // Emit the latest telemetry and wait, letting other things run
-            this.telemetry.dashboard.update();
+            this.telemetry.update();
             this.idle();
         }
     }
