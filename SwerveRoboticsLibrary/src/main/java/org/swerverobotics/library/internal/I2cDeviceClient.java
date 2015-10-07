@@ -617,7 +617,10 @@ public final class I2cDeviceClient implements II2cDeviceClient
 
         // The user has new data for us to write. We could do nothing, in which case the data
         // will go out at the next callback cycle just fine, or we could try to push it out
-        // more aggressively.
+        // more aggressively. Unfortunately, at present there's no way to push it out more quickly,
+        // so in effect this is a no-op. But we've left the code we do have here in place as a
+        // reminder of our current thoughts about some pieces of how the two modes would interact
+        // should that situation change.
         void onNewDataToWrite()
             {
             updateStateMachines(UPDATE_STATE_MACHINE.FROM_USER_WRITE);
@@ -639,6 +642,7 @@ public final class I2cDeviceClient implements II2cDeviceClient
 
             setActionFlag   = true;     // causes an I2C read to happen
             queueFullWrite  = true;     // for just the mode bytes
+            queueRead       = true;     // read the mode byte so we can tell when the switch is done
 
             dirtyModeCacheStatus();
             }
@@ -654,7 +658,8 @@ public final class I2cDeviceClient implements II2cDeviceClient
             readWindowSentToControllerInitialized = true;
 
             setActionFlag  = true;      // causes the I2C write to happen
-            queueFullWrite = true;      // for the mode bytes and the payload
+            queueFullWrite = true;      // for the mode byte and the payload
+            queueRead      = true;      // read the mode byte too so that isI2cPortInReadMode() will report correctly
 
             dirtyModeCacheStatus();
             }
@@ -762,7 +767,11 @@ public final class I2cDeviceClient implements II2cDeviceClient
                         }
 
                     if (writeCacheStatus == WRITE_CACHE_STATUS.QUEUED)
+                        {
                         writeCacheStatus = WRITE_CACHE_STATUS.IDLE;
+                        // Our write mode status should have been reported back to us
+                        assertTrue(!BuildConfig.DEBUG || i2cDevice.isI2cPortInWriteMode());
+                        }
 
                     //--------------------------------------------------------------------------
                     // That limits the number of states the caches can now be in
@@ -784,7 +793,12 @@ public final class I2cDeviceClient implements II2cDeviceClient
                             {
                             // See also below XYZZY
                             readCacheStatus = READ_CACHE_STATUS.QUEUED;
-                            setActionFlag = true;       // actually do an I2C read
+                            setActionFlag   = true;     // actually do an I2C read
+                            queueRead       = true;     // read the I2C read results
+                            }
+                        else
+                            {
+                            queueRead = true;           // read the mode byte
                             }
                         }
 
@@ -820,7 +834,8 @@ public final class I2cDeviceClient implements II2cDeviceClient
                                 // See also above XYZZY
                                 readWindowActuallyRead = readWindowSentToController;
                                 readCacheStatus = READ_CACHE_STATUS.QUEUED;
-                                setActionFlag = true;       // actually do an I2C read
+                                setActionFlag   = true;         // actually do an I2C read
+                                queueRead       = true;         // read the results of the read
                                 }
                             else
                                 {
@@ -840,7 +855,7 @@ public final class I2cDeviceClient implements II2cDeviceClient
 
                     //--------------------------------------------------------------------------
                     // Reissue any previous read if we should. The only way we are here and
-                    // see READ_CACHE_STATUS.VALID_ONLYONCE is if we completed a queuing operation
+                    // see READ_CACHE_STATUS.QUEUE_COMPLETED is if we completed a queuing operation
                     // above.
 
                     else if (readCacheStatus == READ_CACHE_STATUS.QUEUE_COMPLETED)
@@ -849,6 +864,7 @@ public final class I2cDeviceClient implements II2cDeviceClient
                             {
                             readCacheStatus = READ_CACHE_STATUS.VALID_QUEUED;
                             setActionFlag = true;           // actually do an I2C read
+                            queueRead     = true;           // read the results of the read
                             }
                         else
                             {
@@ -863,12 +879,6 @@ public final class I2cDeviceClient implements II2cDeviceClient
                         {
                         // Just leave it there until someone reads it
                         }
-
-                    //--------------------------------------------------------------------------
-                    // In all cases, we want to read the latest from the controller to get read
-                    // vs write mode settings, if nothing else.
-
-                    queueRead = true;
 
                     //----------------------------------------------------------------------------------
                     // Ok, after all that we finally know what how we're required to
@@ -938,7 +948,8 @@ public final class I2cDeviceClient implements II2cDeviceClient
 
                 else if (caller==UPDATE_STATE_MACHINE.FROM_USER_WRITE)
                     {
-                    // This is not yet implemented
+                    // There's nothing we know to do that would speed things up, so we
+                    // just do nothing here and wait until the next portIsReady() callback.
                     }
 
                 //----------------------------------------------------------------------------------
