@@ -1,5 +1,6 @@
 package org.swerverobotics.library.examples;
 
+import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorController;
 import com.qualcomm.robotcore.hardware.Gamepad;
@@ -26,7 +27,7 @@ public class SynchDrivabotDemo extends SynchronousOpMode
     // not here at their member variable declarations.
     DcMotor motorLeft = null;
     DcMotor motorRight = null;
-    LED led = null;
+    //LED led = null;
 
     // Our sensors, motors, and other devices go here, along with other long term state
     IBNO055IMU imu;
@@ -42,6 +43,8 @@ public class SynchDrivabotDemo extends SynchronousOpMode
     int                     i2cCycles;
     double                  ms;
 
+    ColorSensor sensorRGB = null;
+
     @Override protected void main() throws InterruptedException
     {
         // Initialize our hardware variables. Note that the strings used here as parameters
@@ -49,7 +52,7 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         // step you did in the FTC Robot Controller app on the phone.
         this.motorLeft = this.hardwareMap.dcMotor.get("motorLeft");
         this.motorRight = this.hardwareMap.dcMotor.get("motorRight");
-        this.led = this.hardwareMap.led.get("led");
+        //this.led = this.hardwareMap.led.get("led");
 
         // Configure the knobs of the hardware according to how you've wired your
         // robot. Here, we assume that there are no encoders connected to the motors,
@@ -71,6 +74,9 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         imu = ClassFactory.createAdaFruitBNO055IMU(hardwareMap.i2cDevice.get("imu"), parameters);
 
         imu.startAccelerationIntegration(new Position(), new Velocity());
+
+        // get a reference to our ColorSensor object.
+        sensorRGB = hardwareMap.colorSensor.get("ada");
 
 
         // Configure the dashboard however we want it
@@ -94,8 +100,8 @@ public class SynchDrivabotDemo extends SynchronousOpMode
                 // There is (likely) new gamepad input available.
                 // Do something with that! Here, we just drive.
                 this.doManualDrivingControl(this.gamepad1);
-                if (gamepad1.a) led.enable(true);
-                if (gamepad1.b) led.enable(false);
+               // if (gamepad1.a) led.enable(true);
+               // if (gamepad1.b) led.enable(false);
 
                 if (gamepad1.b) {
 
