@@ -43,8 +43,6 @@ public class SynchDrivabotDemo extends SynchronousOpMode
     int                     i2cCycles;
     double                  ms;
 
-    ColorSensor sensorRGB = null;
-
     @Override protected void main() throws InterruptedException
     {
         // Initialize our hardware variables. Note that the strings used here as parameters
@@ -74,10 +72,6 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         imu = ClassFactory.createAdaFruitBNO055IMU(hardwareMap.i2cDevice.get("imu"), parameters);
 
         imu.startAccelerationIntegration(new Position(), new Velocity());
-
-        // get a reference to our ColorSensor object.
-        sensorRGB = hardwareMap.colorSensor.get("ada");
-
 
         // Configure the dashboard however we want it
         this.configureDashboard();

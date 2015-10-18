@@ -1,5 +1,6 @@
 package org.swerverobotics.library.examples;
 
+import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.LED;
 
 import org.swerverobotics.library.SynchronousOpMode;
@@ -8,21 +9,25 @@ import org.swerverobotics.library.interfaces.IFunc;
 import org.swerverobotics.library.interfaces.TeleOp;
 
 /**
- * SynchLEDDemo is a short demo on using the digital output pins to light an LED.
- * It assumes that you have 1 led connected to a Core Device Interface
- * and that the led is named "led" in your robot configuration file.
+ * SynchLEDDemo is a short demo on using the Adafruit Color Sensor module.
+ * It assumes that you have an Adafruit Color Sensor connected to a Core Device Interface
+ * called "ada" and the led of the device is connected to a digital pin called "adaLED"
  */
-@TeleOp(name="LED demo", group="Swerve Examples")
-@Disabled
+@TeleOp(name="AdaColorSensor", group="Swerve Examples")
 public class SynchAdaColorSensorDemo extends SynchronousOpMode {
 
-    LED led;
-    boolean led_state = false; //unlike DigitalChannel, leds don't let you read their state, so we need to store it elsewhere.
+    ColorSensor sensorRGB = null;
+    LED led = null;
+    boolean led_state = false;
 
     @Override public void main() throws InterruptedException {
-        // We are expecting the LED to be attached to a digital port on a core device interface
-        // module and named "led".
-        led = hardwareMap.led.get("led");
+
+        // get a reference to our ColorSensor object.
+        sensorRGB = hardwareMap.colorSensor.get("ada");
+
+        // get a regerence to the LED on the color sensor board
+        led = hardwareMap.led.get("adaLED");
+
 
         // Set up our dashboard computations
         composeDashboard();
@@ -36,9 +41,11 @@ public class SynchAdaColorSensorDemo extends SynchronousOpMode {
                 if (this.gamepad1.a) {
                     led_state = true;
                     led.enable(led_state);
+                    sensorRGB.enableLed(led_state);
                 } else if (this.gamepad1.b) {
                     led_state = false;
                     led.enable(led_state);
+                    sensorRGB.enableLed(led_state);
                 }
             }
             telemetry.update();
@@ -70,6 +77,15 @@ public class SynchAdaColorSensorDemo extends SynchronousOpMode {
                         return led_state;
                     }
                 }));
+        telemetry.addLine(
+                telemetry.item("color: ", new IFunc<Object>() {
+                            @Override
+                            public Object value() {
+                                //return led.getState(); //unlike DigitalChannel, leds don't let you read their state, so use the variable here instead.
+                                return "r: " + sensorRGB.red() + " g: " + sensorRGB.green() + " b: " + sensorRGB.blue();
+                            }
+                        })
+        );
     }
 
 }
