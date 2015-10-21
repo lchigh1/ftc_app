@@ -1,6 +1,5 @@
 package org.swerverobotics.library.examples;
 
-import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorController;
 import com.qualcomm.robotcore.hardware.Gamepad;
@@ -25,14 +24,9 @@ public class SynchDrivabotDemo extends SynchronousOpMode
 {
     // All hardware variables can only be initialized inside the main() function,
     // not here at their member variable declarations.
-    DcMotor Motor1 = null;
-    DcMotor Motor2 = null;
-    DcMotor Motor3 = null;
-    DcMotor Motor4 = null;
-    DcMotor Motor5 = null;
-    DcMotor Motor6 = null;
-    
-
+    DcMotor motorLeft = null;
+    DcMotor motorRight = null;
+    LED led = null;
 
     // Our sensors, motors, and other devices go here, along with other long term state
     IBNO055IMU imu;
@@ -53,28 +47,19 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         // Initialize our hardware variables. Note that the strings used here as parameters
         // to 'get' must correspond to the names you assigned during the robot configuration
         // step you did in the FTC Robot Controller app on the phone.
-        this.Motor1 = this.hardwareMap.dcMotor.get("Motor1");
-        this.Motor2 = this.hardwareMap.dcMotor.get("Motor2");
-        this.Motor3 = this.hardwareMap.dcMotor.get("Motor3");
-        this.Motor4 = this.hardwareMap.dcMotor.get("Motor4");
-        this.Motor5 = this.hardwareMap.dcMotor.get("Motor5");
-        this.Motor6 = this.hardwareMap.dcMotor.get("Motor6");
-        
+        this.motorLeft = this.hardwareMap.dcMotor.get("motorLeft");
+        this.motorRight = this.hardwareMap.dcMotor.get("motorRight");
+        this.led = this.hardwareMap.led.get("led");
+
         // Configure the knobs of the hardware according to how you've wired your
         // robot. Here, we assume that there are no encoders connected to the motors,
         // so we inform the motor objects of that fact.
-        this.Motor1.setChannelMode(DcMotorController.RunMode.RUN_USING_ENCODERS);
-        this.Motor2.setChannelMode(DcMotorController.RunMode.RUN_USING_ENCODERS);
-        this.Motor3.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
-        this.Motor4.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
-        this.Motor5.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
-        this.Motor6.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
+        this.motorLeft.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
+        this.motorRight.setChannelMode(DcMotorController.RunMode.RUN_WITHOUT_ENCODERS);
 
         // One of the two motors (here, the left) should be set to reversed direction
         // so that it can take the same power level values as the other motor.
-        this.Motor5.setDirection(DcMotor.Direction.REVERSE);
-        this.Motor6.setDirection(DcMotor.Direction.REVERSE);
-        this.Motor2.setDirection(DcMotor.Direction.REVERSE);
+        this.motorLeft.setDirection(DcMotor.Direction.REVERSE);
 
         // We are expecting the IMU to be attached to an I2C port on  a core device interface
         // module and named "imu". Retrieve that raw I2cDevice and then wrap it in an object that
@@ -83,9 +68,9 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         parameters.accelunit      = IBNO055IMU.ACCELUNIT.METERS_PERSEC_PERSEC;
         parameters.loggingEnabled = true;
         parameters.loggingTag     = "BNO055";
-       // imu = ClassFactory.createAdaFruitBNO055IMU(hardwareMap.i2cDevice.get("imu"), parameters);
+        imu = ClassFactory.createAdaFruitBNO055IMU(hardwareMap.i2cDevice.get("imu"), parameters);
 
-        //imu.startAccelerationIntegration(new Position(), new Velocity());
+        imu.startAccelerationIntegration(new Position(), new Velocity());
 
 
         // Configure the dashboard however we want it
@@ -99,7 +84,7 @@ public class SynchDrivabotDemo extends SynchronousOpMode
             //do nothing until the opmode is active
         }
 
-       // angles     = imu.getAngularOrientation();
+        angles     = imu.getAngularOrientation();
 
         // Enter a loop processing all the input we receive
         while (this.opModeIsActive())
@@ -108,7 +93,9 @@ public class SynchDrivabotDemo extends SynchronousOpMode
             {
                 // There is (likely) new gamepad input available.
                 // Do something with that! Here, we just drive.
-                //this.doManualDrivingControl(this.gamepad1);
+                this.doManualDrivingControl(this.gamepad1);
+                if (gamepad1.a) led.enable(true);
+                if (gamepad1.b) led.enable(false);
 
                 if (gamepad1.b) {
 
@@ -117,6 +104,7 @@ public class SynchDrivabotDemo extends SynchronousOpMode
                     this.moveForward(4000, 0.2);
                     this.turn(-25, 0.2);
                     this.moveForward(400, 0.2);
+
                 }
 
                 if (gamepad1.x) {
@@ -136,25 +124,20 @@ public class SynchDrivabotDemo extends SynchronousOpMode
 
                 if (gamepad1.left_bumper)
                 {
-                    Motor1.setPower(.8);
-                    Motor2.setPower(.8);
-                    Motor3.setPower(.8);
-                    Motor4.setPower(.8);
-                    Motor5.setPower(.8);
-                    Motor6.setPower(.8);
+                    //this.TurnRight(45);
+                    this.turn(-90, 0.4);
                 }
 
                 if (gamepad1.right_bumper)
                 {
                     //this.TurnRight(45);
-                    Motor1.setPower(.5);
-
+                    this.turn(90, 0.4);
                 }
 
                 if (gamepad1.dpad_left)
                 {
                     //this.TurnRight(45);
-                    this.turn(-90, 0.4);
+                    this.turn(-270, 0.4);
                 }
 
                 if (gamepad1.dpad_right)
@@ -203,13 +186,13 @@ public class SynchDrivabotDemo extends SynchronousOpMode
 
     void moveForward(long timeInMillis, double power) throws InterruptedException
     {
-        Motor1.setPower(-power);
-        Motor2.setPower(-power);
+        motorLeft.setPower(-power);
+        motorRight.setPower(-power);
 
         Thread.sleep(timeInMillis);
 
-        Motor1.setPower(0);
-        Motor2.setPower(0);
+        motorLeft.setPower(0);
+        motorRight.setPower(0);
     }
 
     void turn(double delta, double power)
@@ -279,8 +262,8 @@ public class SynchDrivabotDemo extends SynchronousOpMode
             cur = normalizeAngle360(cur + offset);
             dest = normalizeAngle360(dest + offset);
 
-            Motor1.setPower(power);
-            Motor2.setPower(-power);
+            motorLeft.setPower(power);
+            motorRight.setPower(-power);
 
             while ((cur > dest))
             {
@@ -307,8 +290,8 @@ public class SynchDrivabotDemo extends SynchronousOpMode
             cur = normalizeAngle360(cur + offset);
             dest = normalizeAngle360(dest + offset);
 
-            Motor1.setPower(-power);
-            Motor2.setPower(power);
+            motorLeft.setPower(-power);
+            motorRight.setPower(power);
 
             //now compass 0 doesn't fall between the current heading and the destination,
             //so we can use a < comparison to wait for our target
@@ -321,11 +304,152 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         }
 
         //result += "dest reached: " + cur.ToString() + "\n";
-        Motor1.setPower(0);
-        Motor2.setPower(0);
+        motorLeft.setPower(0);
+        motorRight.setPower(0);
     }
 
+    /* turn a specific angle (a delta from the current heading) at a given percentage of power
+       Positive deltas result in Right turns.
+       In other words, turn(40, .4) will turn 40 degrees to the right at 40% power.
+     */
+    /*
+    void turn(double delta, double power)
+    {
+        double start_heading = getCurrentHeading();
+        double cur = start_heading;
+        double dest = cur + delta;
 
+        //normalize dest to between 0..360
+        // because when we add an angle to start_heading, which is 0..360, we might go out of range of 0..360
+        dest = normalizeAngle360(dest);
+
+        boolean goLeft = (delta < 0 ? true : false);
+
+        if (goLeft) //go left: moving in negative direction around compass
+        {
+            motorLeft.setPower(power);
+            motorRight.setPower(-power);
+
+            //if the dest is normalized to a value larger than the current heading,
+            //it means that the compass will pass 0 on the way to the dest.
+            //When that happens, the current heading will jump from 0 to 359
+            //so we need to get past that point
+            if (cur < dest)
+            {
+                //get across 0 boundary
+
+                while (cur <= start_heading)
+                {
+                    cur = getCurrentHeading();
+                }
+            }
+
+            //no 0 boundary
+
+            double wrap_point = cur; //watch for wrapping in boundary conditions
+
+            //now compass 0 doesn't fall between the current heading and the destination,
+            //so we can use a > comparison to wait for our target
+            //but we still need to watch for wrapping around the compass in case
+            //the dest is close to 0 and the compass wraps before we think we're done
+            while ((cur > dest) && (wrap_point>=cur))
+            {
+                cur = getCurrentHeading();
+            }
+        }
+        else //go right: moving in positive direction around compass
+        {
+            motorLeft.setPower(-power);
+            motorRight.setPower(power);
+
+            //if the dest is normalized to a value less than than the current heading,
+            //it means that the compass will pass 0 on the way to the dest.
+            //When that happens, the current heading will jump from 359 to 0
+            //so we need to get past that point
+            if (cur > dest)
+            {
+                while (cur >= start_heading)
+                {
+                    cur = getCurrentHeading();
+                }
+            }
+
+            double wrap_point = cur; //watch for wrapping in boundary conditions
+
+            //now compass 0 doesn't fall between the current heading and the destination,
+            //so we can use a < comparison to wait for our target
+            //but we still need to watch for wrapping around the compass in case
+            //the dest is close to 0 and the compass wraps before we think we're done
+            while ((cur < dest) && (wrap_point <= cur))
+            {
+                cur = getCurrentHeading();
+            }
+        }
+
+        motorLeft.setPower(0);
+        motorRight.setPower(0);
+
+    }
+    */
+/*
+    void TurnRight(double targetAngle) throws InterruptedException
+    {
+        angles     = imu.getAngularOrientation();
+
+        double currentheading = normalizeAngle180(angles.heading);
+        double targetheading = normalizeAngle180(currentheading - targetAngle);
+
+        motorLeft.setPower(-.4);
+        motorRight.setPower(.4);
+
+        while (currentheading >= targetheading){
+
+            // Emit telemetry with the freshest possible values
+            //this.telemetry.update();
+
+            angles     = imu.getAngularOrientation();
+            currentheading = normalizeAngle180(angles.heading);
+
+            // Let the rest of the system run until there's a stimulus from the robot controller runtime.
+            this.idle();
+
+
+        }
+
+        motorLeft.setPower(0);
+        motorRight.setPower(0);
+
+    }
+
+    void TurnLeft(double targetAngle) throws InterruptedException
+    {
+        angles     = imu.getAngularOrientation();
+
+        double currentheading = normalizeAngle180(angles.heading);
+        double targetheading = normalizeAngle180(targetAngle + currentheading);
+
+        motorLeft.setPower(.4);
+        motorRight.setPower(-.4);
+
+        while (currentheading <= targetheading){
+
+            // Emit telemetry with the freshest possible values
+            //this.telemetry.update();
+
+            angles     = imu.getAngularOrientation();
+            currentheading = normalizeAngle180(angles.heading);
+            // Let the rest of the system run until there's a stimulus from the robot controller runtime.
+            this.idle();
+
+
+        }
+
+        motorLeft.setPower(0);
+        motorRight.setPower(0);
+
+    }
+
+*/
 
     /**
      * Implement a simple two-motor driving logic using the left and right
@@ -365,8 +489,8 @@ public class SynchDrivabotDemo extends SynchronousOpMode
         float powerRight = Range.clip(ctlPower + ctlSteering, -1f, 1f);
 
         // Tell the motors
-        this.Motor1.setPower(powerLeft);
-        this.Motor2.setPower(powerRight);
+        this.motorLeft.setPower(powerLeft);
+        this.motorRight.setPower(powerRight);
     }
 
     float xformDrivingPowerLevels(float level)
@@ -386,21 +510,13 @@ public class SynchDrivabotDemo extends SynchronousOpMode
     void configureDashboard()
     {
         this.telemetry.addLine(
-            /*    this.telemetry.item("heading: ", new IFunc<Object>() {
+                this.telemetry.item("heading: ", new IFunc<Object>() {
                             @Override
                             public Object value() {
                                 return format(angles.heading);
                             }
                         }
                 )
-*/
-        this.telemetry.item("hello: ", new IFunc<Object>() {
-                    @Override
-                    public Object value() {
-                        return "world";
-                    }
-                }
-        )
         );
 
         /*
@@ -412,21 +528,21 @@ public class SynchDrivabotDemo extends SynchronousOpMode
                         {
                             @Override public Object value()
                             {
-                                return format(Motor1.getPower());
+                                return format(motorLeft.getPower());
                             }
                         }),
                         this.telemetry.item("right: ", new IFunc<Object>()
                         {
                             @Override public Object value()
                             {
-                                return format(Motor1.getPower());
+                                return format(motorLeft.getPower());
                             }
                         }),
                         this.telemetry.item("mode: ", new IFunc<Object>()
                         {
                             @Override public Object value()
                             {
-                                return Motor1.getChannelMode();
+                                return motorLeft.getChannelMode();
                             }
                         })
                 );
