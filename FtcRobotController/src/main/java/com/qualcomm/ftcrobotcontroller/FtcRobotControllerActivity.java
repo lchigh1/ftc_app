@@ -61,7 +61,7 @@ import com.qualcomm.ftccommon.LaunchActivityConstantsList;
 import com.qualcomm.ftccommon.Restarter;
 import com.qualcomm.ftccommon.UpdateUI;
 import com.qualcomm.ftcrobotcontroller.opmodes.FtcOpModeRegister;
-import com.qualcomm.modernrobotics.ModernRoboticsHardwareFactory;
+import com.qualcomm.hardware.ModernRoboticsHardwareFactory;
 import com.qualcomm.robotcore.hardware.HardwareFactory;
 import com.qualcomm.robotcore.hardware.configuration.Utility;
 import com.qualcomm.robotcore.util.Dimmer;
@@ -91,12 +91,13 @@ public class FtcRobotControllerActivity extends Activity {
   protected TextView textDeviceName;
   protected TextView textWifiDirectStatus;
   protected TextView textRobotStatus;
+  protected TextView textWifiDirectPassphrase;
   protected TextView[] textGamepad = new TextView[NUM_GAMEPADS];
   protected TextView textOpMode;
   protected TextView textErrorMessage;
   protected ImmersiveMode immersion;
 
-  protected UpdateUI updateUI;
+  protected UpdateUIHook updateUI;
   protected Dimmer dimmer;
   protected LinearLayout entireScreenLayout;
 
@@ -156,6 +157,7 @@ public class FtcRobotControllerActivity extends Activity {
     textRobotStatus = (TextView) findViewById(R.id.textRobotStatus);
     textOpMode = (TextView) findViewById(R.id.textOpMode);
     textErrorMessage = (TextView) findViewById(R.id.textErrorMessage);
+    textWifiDirectPassphrase = (TextView) findViewById(R.id.textWifiDirectPassphrase);
     textGamepad[0] = (TextView) findViewById(R.id.textGamepad1);
     textGamepad[1] = (TextView) findViewById(R.id.textGamepad2);
     immersion = new ImmersiveMode(getWindow().getDecorView());
@@ -163,11 +165,11 @@ public class FtcRobotControllerActivity extends Activity {
     dimmer.longBright();
     Restarter restarter = new RobotRestarter();
 
-    updateUI = new UpdateUI(this, dimmer);
+    updateUI = new UpdateUIHook(this, dimmer);
     updateUI.setRestarter(restarter);
     updateUI.setTextViews(textWifiDirectStatus, textRobotStatus,
-        textGamepad, textOpMode, textErrorMessage, textDeviceName);
-    callback = updateUI.new Callback();
+            textGamepad, textOpMode, textErrorMessage, textDeviceName);
+    callback = updateUI.new CallbackHook();
 
     PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
     preferences = PreferenceManager.getDefaultSharedPreferences(this);
@@ -245,34 +247,37 @@ public class FtcRobotControllerActivity extends Activity {
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
-    switch (item.getItemId()) {
-      case R.id.action_restart_robot:
+    int id = item.getItemId();
+    if (id==R.id.action_restart_robot) {
         dimmer.handleDimTimer();
         Toast.makeText(context, "Restarting Robot", Toast.LENGTH_SHORT).show();
         requestRobotRestart();
         return true;
-      case R.id.action_settings:
+    }
+    if (id==R.id.action_settings) {
         // The string to launch this activity must match what's in AndroidManifest of FtcCommon for this activity.
         Intent settingsIntent = new Intent("com.qualcomm.ftccommon.FtcRobotControllerSettingsActivity.intent.action.Launch");
         startActivityForResult(settingsIntent, LaunchActivityConstantsList.FTC_ROBOT_CONTROLLER_ACTIVITY_CONFIGURE_ROBOT);
         return true;
-      case R.id.action_about:
+    }
+    if (id==R.id.action_about) {
         // The string to launch this activity must match what's in AndroidManifest of FtcCommon for this activity.
         Intent intent = new Intent("com.qualcomm.ftccommon.configuration.AboutActivity.intent.action.Launch");
         startActivity(intent);
         return true;
-      case R.id.action_exit_app:
+    }
+    if (id==R.id.action_exit_app) {
         finish();
         return true;
-      case R.id.action_view_logs:
+    }
+    if (id==R.id.action_view_logs) {
         // The string to launch this activity must match what's in AndroidManifest of FtcCommon for this activity.
         Intent viewLogsIntent = new Intent("com.qualcomm.ftccommon.ViewLogsActivity.intent.action.Launch");
         viewLogsIntent.putExtra(LaunchActivityConstantsList.VIEW_LOGS_ACTIVITY_FILENAME, RobotLog.getLogFilename(this));
         startActivity(viewLogsIntent);
         return true;
-      default:
-        return super.onOptionsItemSelected(item);
     }
+    return super.onOptionsItemSelected(item);
   }
 
   @Override
@@ -383,4 +388,75 @@ public class FtcRobotControllerActivity extends Activity {
       }
     });
   }
-}
+
+class UpdateUIHook extends UpdateUI
+  {
+  //------------------------------------------------------------------------------------------------
+  // State
+  //------------------------------------------------------------------------------------------------
+
+  FtcRobotControllerActivity activity;
+  FtcRobotControllerService  controllerService;
+
+  //------------------------------------------------------------------------------------------------
+  // Construction
+  //------------------------------------------------------------------------------------------------
+
+  UpdateUIHook(FtcRobotControllerActivity activity, Dimmer dimmer)
+    {
+    super(activity, dimmer);
+    this.activity = activity;
+    this.controllerService = null;
+    }
+
+  @Override public void setControllerService(FtcRobotControllerService controllerService)
+    {
+    super.setControllerService(controllerService);
+    this.controllerService = controllerService;
+    }
+
+  //------------------------------------------------------------------------------------------------
+  // Operations
+  //------------------------------------------------------------------------------------------------
+
+  class CallbackHook extends UpdateUI.Callback
+    {
+    @Override public void wifiDirectUpdate(WifiDirectAssistant.Event event)
+      {
+      super.wifiDirectUpdate(event);
+
+      final String message = controllerService == null
+        ? "" :
+        String.format("Wifi Direct passphrase: %s", controllerService.getWifiDirectAssistant().getPassphrase());
+
+      UpdateUIHook.this.activity.runOnUiThread(new Runnable()
+      {
+      @Override public void run()
+        {
+        activity.textWifiDirectPassphrase.setText(message);
+        }
+      });
+      }
+    }
+  }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

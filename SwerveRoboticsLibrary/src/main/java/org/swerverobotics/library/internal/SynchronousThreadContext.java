@@ -1,7 +1,7 @@
 package org.swerverobotics.library.internal;
 
-import junit.framework.Assert;
-import org.swerverobotics.library.BuildConfig;
+import org.swerverobotics.library.*;
+import org.swerverobotics.library.interfaces.*;
 
 /**
  * SynchronousThreadContext maintains the internal context for a synchronous thread.
@@ -13,48 +13,69 @@ public class SynchronousThreadContext
     //----------------------------------------------------------------------------------------------
 
     /**
-     * getThread() returns the Thread for which we are the internal context.
-     */
-    public Thread getThread() { return this.thread; }
-
-    /**
-     * getThunker() returns the channel by which we can thunk from a synchronous
-     * thread to the loop() thread.
-     */
-    public IThunker getThunker() { return this.thunker; }
-
-    /**
      * The action key used for write thunks that are issued by this thread
      */
     public int actionKeyWritesFromThisThread = Thunk.getNewActionKey();
 
-    private final Thread   thread;
-    private final IThunker thunker;
+    private final Thread           thread;
+    private final IThunkDispatcher thunker;
 
     //----------------------------------------------------------------------------------------------
     // Construction
     //----------------------------------------------------------------------------------------------
 
-    public SynchronousThreadContext(IThunker thunker)
+    public SynchronousThreadContext(IThunkDispatcher thunker)
         {
         this.thread = Thread.currentThread();
         this.thunker = thunker;
         }
 
     //----------------------------------------------------------------------------------------------
-    // Lookup
+    // Access
     //----------------------------------------------------------------------------------------------
 
-    public static void setThreadThunker(IThunker thunker)
-        {
-        tlsThunker.set(new SynchronousThreadContext(thunker));
-        }
-
+    /**
+     * Retrieves the thread context the current thread
+     * @return the context of the current thread
+     */
     public static SynchronousThreadContext getThreadContext()
         {
         return tlsThunker.get();
         }
-    
+
+    /**
+     * Returns the Thread for which the receiver is the context.
+     *
+     * @return the thread for which the receiver is the context
+     */
+    public Thread getThread() { return this.thread; }
+
+    /**
+     * Returns an object that can assist in thunking work from a synchronous thread
+     * to the loop() thread.
+     *
+     * @return the object that can help with thunking
+     */
+    public IThunkDispatcher getThunker() { return this.thunker; }
+
+    /**
+     * Returns an object that one can use to register an action when a synchronous opmode stops
+     * @return
+     */
+    public IStopActionRegistrar getStopActionRegistrar()
+        {
+        return (IStopActionRegistrar)(this.getThunker());
+        }
+
+    //----------------------------------------------------------------------------------------------
+    // Lookup
+    //----------------------------------------------------------------------------------------------
+
+    public static void setThreadThunker(IThunkDispatcher thunker)
+        {
+        tlsThunker.set(new SynchronousThreadContext(thunker));
+        }
+
     public static boolean isSynchronousThread()
         {
         return getThreadContext() != null;
@@ -62,10 +83,7 @@ public class SynchronousThreadContext
     
     public static void assertSynchronousThread()
         {
-        if (BuildConfig.DEBUG) 
-            {
-            Assert.assertEquals(true, isSynchronousThread());
-            }
+        junit.framework.Assert.assertTrue(!BuildConfig.DEBUG || isSynchronousThread());
         }
 
     /**
@@ -75,5 +93,4 @@ public class SynchronousThreadContext
         {
         @Override protected SynchronousThreadContext initialValue() { return null; }
         };
-
     }

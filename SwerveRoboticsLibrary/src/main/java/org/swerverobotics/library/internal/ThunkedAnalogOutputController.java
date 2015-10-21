@@ -7,7 +7,7 @@ import org.swerverobotics.library.interfaces.*;
 /**
  * Another in our series
  */
-public class ThunkedAnalogOutputController implements AnalogOutputController, IThunkingWrapper<AnalogOutputController>
+public class ThunkedAnalogOutputController implements AnalogOutputController, IThunkWrapper<AnalogOutputController>
     {
     //----------------------------------------------------------------------------------------------
     // State
@@ -15,7 +15,7 @@ public class ThunkedAnalogOutputController implements AnalogOutputController, IT
 
     private AnalogOutputController target;          // can only talk to him on the loop thread
 
-    @Override public AnalogOutputController getThunkTarget() { return this.target; }
+    @Override public AnalogOutputController getWrappedTarget() { return this.target; }
 
     //----------------------------------------------------------------------------------------------
     // Construction
@@ -33,7 +33,7 @@ public class ThunkedAnalogOutputController implements AnalogOutputController, IT
         }
 
     //----------------------------------------------------------------------------------------------
-    // AnalogOutputController
+    // HardwareDevice
     //----------------------------------------------------------------------------------------------
 
     @Override public void close()
@@ -58,6 +58,17 @@ public class ThunkedAnalogOutputController implements AnalogOutputController, IT
             }).doUntrackedReadOperation();
         }
 
+    @Override public String getConnectionInfo()
+        {
+        return (new ThunkForReading<String>()
+            {
+            @Override protected void actionOnLoopThread()
+                {
+                this.result = target.getConnectionInfo();
+                }
+            }).doUntrackedReadOperation();
+        }
+
     @Override public String getDeviceName()
         {
         return (new ThunkForReading<String>()
@@ -69,6 +80,10 @@ public class ThunkedAnalogOutputController implements AnalogOutputController, IT
             }).doUntrackedReadOperation();
         }
     
+    //----------------------------------------------------------------------------------------------
+    // AnalogOutputController
+    //----------------------------------------------------------------------------------------------
+
     @Override public SerialNumber getSerialNumber()
         {
         return (new ThunkForReading<SerialNumber>()
