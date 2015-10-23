@@ -2,6 +2,8 @@ package org.usfirst.ftc.exampleteam.yourcodehere;
 
 import android.content.Context;
 import android.media.MediaPlayer;
+
+import org.swerverobotics.library.SwerveUtil;
 import org.swerverobotics.library.interfaces.*;
 import org.swerverobotics.library.examples.*;
 import com.qualcomm.ftcrobotcontroller.opmodes.*;
@@ -79,11 +81,11 @@ public class MyRobotControllerAdministration
     @OnRobotRunning
     public static void playSoundOnRobotRunning(Context context)
         {
-        playSound(context, R.raw.nxtstartup);
+        SwerveUtil.playSound(context, R.raw.nxtstartup);
         }
 
     /**
-     * Any public static method annotated with {@link OnRobotRunning} is invoked when the robot
+     * Any public static method annotated with {@link OnRobotStartupFailure} is invoked when the robot
      * object in the robot controller application fails to enter the running state during
      * an attempt to do so. A common cause of such failures is a mismatch between the robot
      * configuration file and the devices currently attached to the robot.
@@ -96,16 +98,7 @@ public class MyRobotControllerAdministration
     @OnRobotStartupFailure
     public static void playSoundOnRobotStartupFailure(Context context)
         {
-        playSound(context, R.raw.chord);
+        SwerveUtil.playSound(context, R.raw.chord);
         }
 
-    /** Plays a sound given the sounds identity as a (raw) resource. */
-    static void playSound(Context context, int resource)
-        {
-        MediaPlayer mediaPlayer = MediaPlayer.create(context, resource);
-        mediaPlayer.start();
-        while (mediaPlayer.isPlaying())
-            Thread.yield();
-        mediaPlayer.release();
-        }
     }
