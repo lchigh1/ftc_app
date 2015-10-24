@@ -79,9 +79,9 @@ public class MainTeleOp8923 extends SynchronousOpMode
 
                 // Move scorer based on D-pad
                 if(gamepad2.dpad_left)
-                    motorScorer.setPower(POWER_SCORER);
-                else if(gamepad2.dpad_right)
                     motorScorer.setPower(-POWER_SCORER);
+                else if(gamepad2.dpad_right)
+                    motorScorer.setPower(POWER_SCORER);
                 else
                     motorScorer.setPower(POWER_STOP);
             }
