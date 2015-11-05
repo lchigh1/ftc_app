@@ -5,9 +5,7 @@ import org.swerverobotics.library.*;
 import org.swerverobotics.library.interfaces.*;
 
 /**
- * A skeletal example of a do-nothing first OpMode. Go ahead and change this code
- * to suit your needs, or create sibling OpModes adjacent to this one in the same
- * Java package.
+
  */
 @TeleOp(name="My First OpMode")
 public class MyFirstOpMode extends SynchronousOpMode
